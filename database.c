@@ -1,11 +1,9 @@
-#include <iostream>
+﻿#include <mysql.h>
 #include "database.h"
-
-using namespace std;
 
 MYSQL *conn;
 
-bool connectDB()
+bool connectDB(void)
 {
     conn = mysql_init(NULL);
 
@@ -26,7 +24,7 @@ bool connectDB()
     return conn != NULL;
 }
 
-void disconnectDB()
+void disconnectDB(void)
 {
     if(conn)
         mysql_close(conn);

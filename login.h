@@ -1,8 +1,10 @@
-#ifndef LOGIN_H
+﻿#ifndef LOGIN_H
 #define LOGIN_H
+
+#include <stdbool.h>
 
 extern int currentUserId;
 
-bool login();
+bool login(void);
 
 #endif

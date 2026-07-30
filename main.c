@@ -1,4 +1,5 @@
-#include <iostream>
+﻿#include <stdio.h>
+#include <stdlib.h>
 #include "database.h"
 #include "login.h"
 #include "medicine.h"
@@ -9,25 +10,36 @@
 #include "report.h"
 #include "dashboard_report.h"
 
-using namespace std;
+static void clearInput(void)
+{
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
 
-void dashboard()
+void dashboard(void)
 {
     int choice;
 
     do
     {
-        cout << "\n========== PHARMACY MANAGEMENT SYSTEM ==========\n";
-        cout << "1. Manage Users\n";
-        cout << "2. Manage Medicines\n";
-        cout << "3. Manage Suppliers\n";
-        cout << "4. Manage Customers\n";
-        cout << "5. Sell Medicine\n";
-        cout << "6. Reports\n";
-        cout << "7. System Overview (Dashboard)\n";
-        cout << "8. Logout\n";
-        cout << "Choice: ";
-        cin >> choice;
+        printf("\n========== PHARMACY MANAGEMENT SYSTEM =========="
+               "\n");
+        printf("1. Manage Users\n");
+        printf("2. Manage Medicines\n");
+        printf("3. Manage Suppliers\n");
+        printf("4. Manage Customers\n");
+        printf("5. Sell Medicine\n");
+        printf("6. Reports\n");
+        printf("7. System Overview (Dashboard)\n");
+        printf("8. Logout\n");
+        printf("Choice: ");
+
+        if (scanf("%d", &choice) != 1)
+        {
+            clearInput();
+            choice = 0;
+        }
+        clearInput();
 
         switch(choice)
         {
@@ -53,38 +65,45 @@ void dashboard()
                 systemOverview();
                 break;
             case 8:
-                cout << "Logged Out!\n";
+                printf("Logged Out!\n");
                 return;
             default:
-                cout << "Invalid Choice!\n";
+                printf("Invalid Choice!\n");
         }
 
     } while(true);
 }
 
-void menu()
+void menu(void)
 {
     int choice;
 
     while(true)
     {
-        cout << "\n========== MAIN MENU ==========\n";
-        cout << "1. Login\n";
-        cout << "2. Exit\n";
-        cout << "Choice: ";
-        cin >> choice;
+        printf("\n========== MAIN MENU =========="
+               "\n");
+        printf("1. Login\n");
+        printf("2. Exit\n");
+        printf("Choice: ");
+
+        if (scanf("%d", &choice) != 1)
+        {
+            clearInput();
+            choice = 0;
+        }
+        clearInput();
 
         switch(choice)
         {
             case 1:
                 if(login())
                 {
-                    cout << "\nLogin Successful!\n";
+                    printf("\nLogin Successful!\n");
                     dashboard();
                 }
                 else
                 {
-                    cout << "\nInvalid Username or Password!\n";
+                    printf("\nInvalid Username or Password!\n");
                 }
                 break;
 
@@ -93,16 +112,16 @@ void menu()
                 return;
 
             default:
-                cout << "Invalid Choice!\n";
+                printf("Invalid Choice!\n");
         }
     }
 }
 
-int main()
+int main(void)
 {
     if(!connectDB())
     {
-        cout << "Database Connection Failed!\n";
+        printf("Database Connection Failed!\n");
         return 1;
     }
 

@@ -1,11 +1,12 @@
-#ifndef DATABASE_H
+﻿#ifndef DATABASE_H
 #define DATABASE_H
 
+#include <stdbool.h>
 #include <mysql.h>
 
 extern MYSQL *conn;
 
-bool connectDB();
-void disconnectDB();
+bool connectDB(void);
+void disconnectDB(void);
 
 #endif

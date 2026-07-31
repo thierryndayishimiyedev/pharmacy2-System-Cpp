@@ -6,5 +6,6 @@ void sellMedicine();
 void viewSales();
 void searchSales();
 void deleteSale();
+void viewSaleDetails();
 
 #endif

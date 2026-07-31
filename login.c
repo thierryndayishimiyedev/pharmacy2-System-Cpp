@@ -3,14 +3,9 @@
 #include <string.h>
 #include "database.h"
 #include "login.h"
+#include "ui.h"
 
 int currentUserId = 0;
-
-static void clearInput(void)
-{
-    int c;
-    while ((c = getchar()) != '\n' && c != EOF);
-}
 
 bool login(void)
 {
@@ -18,11 +13,10 @@ bool login(void)
     char password[128];
     char usernameEscaped[256];
     char passwordEscaped[256];
-    char sql[512];
+    char sql[640];
 
-    clearInput();
-
-    printf("\nUsername: ");
+    printHeader("LOGIN");
+    printf("Username: ");
     if (fgets(username, sizeof(username), stdin) == NULL)
         return false;
     username[strcspn(username, "\r\n")] = '\0';
@@ -32,13 +26,16 @@ bool login(void)
         return false;
     password[strcspn(password, "\r\n")] = '\0';
 
-    if (username[0] == '\0' || password[0] == '\0')
+    if (!isValidUsername(username) || !isValidPassword(password))
+    {
+        printErrorFmt("Enter a valid username and password.");
         return false;
+    }
 
     mysql_real_escape_string(conn, usernameEscaped, username, strlen(username));
     mysql_real_escape_string(conn, passwordEscaped, password, strlen(password));
 
-    snprintf(sql, sizeof(sql), "SELECT user_id FROM users WHERE username='%s' AND password='%s'", usernameEscaped, passwordEscaped);
+    snprintf(sql, sizeof(sql), "SELECT user_id, full_name FROM users WHERE username='%s' AND password='%s'", usernameEscaped, passwordEscaped);
 
     if (mysql_query(conn, sql))
     {
@@ -55,6 +52,7 @@ bool login(void)
     {
         MYSQL_ROW row = mysql_fetch_row(result);
         currentUserId = atoi(row[0]);
+        setActiveUserDisplay(row[1]);
         mysql_free_result(result);
         return true;
     }

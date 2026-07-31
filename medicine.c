@@ -6,6 +6,7 @@
 #include "database.h"
 #include "medicine.h"
 #include "supplier.h"
+#include "ui.h"
 
 static void clearInput(void)
 {
@@ -63,8 +64,6 @@ void addMedicine(void)
 
     showSupplierListShort();
 
-    clearInput();
-
     printf("Medicine Name: ");
     if (fgets(name, sizeof(name), stdin) == NULL)
         return;
@@ -100,41 +99,82 @@ void addMedicine(void)
         return;
     stripNewline(expiry);
 
+    if(!isValidBusinessName(name) || !isValidBusinessName(category))
+    {
+        printErrorFmt("Medicine name and category must be 2-100 valid characters.");
+        pauseForUser();
+        return;
+    }
+    if(supplier <= 0 || !isPositiveAmount(buyPrice) || !isPositiveAmount(sellPrice) || !isNonNegativeNumber(quantity))
+    {
+        printErrorFmt("Supplier ID must be valid; prices must be above zero; quantity cannot be negative.");
+        pauseForUser();
+        return;
+    }
+    if(buyPrice > sellPrice)
+    {
+        printErrorFmt("Medicine cannot be sold below its buying price. Set a selling price equal to or above %.2f.", buyPrice);
+        pauseForUser();
+        return;
+    }
+    if(!isValidDate(expiry))
+    {
+        printErrorFmt("Expiry date must use a real YYYY-MM-DD date.");
+        pauseForUser();
+        return;
+    }
+
     snprintf(sql, sizeof(sql),
         "INSERT INTO medicines(medicine_name,category,supplier_id,buy_price,sell_price,quantity,expiry_date) VALUES('%s','%s',%d,%.2f,%.2f,%d,'%s')",
         name, category, supplier, buyPrice, sellPrice, quantity, expiry);
 
     if(mysql_query(conn, sql) == 0)
-        printf("\nMedicine Added Successfully! (ID: %llu)\n", mysql_insert_id(conn));
+        printSuccessFmt("Medicine added successfully! ID: %llu", mysql_insert_id(conn));
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+
+    pauseForUser();
 }
 
 void viewMedicines(void)
 {
-    if(mysql_query(conn, "SELECT * FROM medicines") != 0)
+    if(mysql_query(conn, "SELECT m.*, s.company_name FROM medicines m LEFT JOIN suppliers s ON m.supplier_id=s.supplier_id ORDER BY m.medicine_name") != 0)
     {
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+        pauseForUser();
         return;
     }
 
     MYSQL_RES *res = mysql_store_result(conn);
     MYSQL_ROW row;
 
-    printf("\n==============================\n");
+    printHeader("MEDICINE LIST");
+    int medicineCount = 0;
+    int totalUnits = 0;
+    double costValue = 0.0, sellingValue = 0.0;
 
     while((row = mysql_fetch_row(res)))
     {
         printf("ID: %s\n", row[0]);
         printf("Name: %s\n", row[1]);
         printf("Category: %s\n", row[2]);
-        printf("Supplier: %s\n", row[3]);
+        printf("Supplier: %s\n", row[9] ? row[9] : "Not assigned");
         printf("Buy: %s\n", row[4]);
         printf("Sell: %s\n", row[5]);
         printf("Qty: %s\n", row[6]);
         printf("Expiry: %s\n", row[7]);
+        printf("Stock Cost Value: %.2f | Potential Sales Value: %.2f\n",
+            atof(row[4]) * atoi(row[6]), atof(row[5]) * atoi(row[6]));
         printf("------------------------\n");
+        medicineCount++;
+        totalUnits += atoi(row[6]);
+        costValue += atof(row[4]) * atoi(row[6]);
+        sellingValue += atof(row[5]) * atoi(row[6]);
     }
+
+    printf("Total medicines: %d | Units in stock: %d\n", medicineCount, totalUnits);
+    printf("Stock cost total: %.2f | Potential sales total: %.2f | Potential margin: %.2f\n",
+        costValue, sellingValue, sellingValue - costValue);
 
     mysql_free_result(res);
 }
@@ -147,8 +187,6 @@ void searchMedicine(void)
     MYSQL_ROW row;
     bool found = false;
 
-    clearInput();
-
     printf("Enter medicine name or ID to search: ");
     if (fgets(keyword, sizeof(keyword), stdin) == NULL)
         return;
@@ -160,7 +198,8 @@ void searchMedicine(void)
 
     if(mysql_query(conn, sql) != 0)
     {
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+        pauseForUser();
         return;
     }
 
@@ -181,9 +220,10 @@ void searchMedicine(void)
     }
 
     if(!found)
-        printf("\nNo medicine found.\n");
+        printInfoFmt("No medicine found.");
 
     mysql_free_result(res);
+    pauseForUser();
 }
 
 void updateMedicine(void)
@@ -192,6 +232,8 @@ void updateMedicine(void)
     char field[128];
     char value[256];
     char sql[2048];
+    float numericValue;
+    int quantityValue;
 
     showMedicineListShort();
 
@@ -210,8 +252,45 @@ void updateMedicine(void)
         return;
     stripNewline(value);
 
-    if (strcmp(field, "supplier_id") == 0 || strcmp(field, "buy_price") == 0 ||
-        strcmp(field, "sell_price") == 0 || strcmp(field, "quantity") == 0)
+    if(id <= 0 || (strcmp(field, "medicine_name") != 0 && strcmp(field, "category") != 0 &&
+        strcmp(field, "supplier_id") != 0 && strcmp(field, "buy_price") != 0 &&
+        strcmp(field, "sell_price") != 0 && strcmp(field, "quantity") != 0 && strcmp(field, "expiry_date") != 0))
+    {
+        printErrorFmt("Enter a positive ID and choose a field shown in the prompt.");
+        pauseForUser(); return;
+    }
+    if((strcmp(field, "medicine_name") == 0 || strcmp(field, "category") == 0) && !isValidBusinessName(value))
+    {
+        printErrorFmt("Name and category must use valid text.");
+        pauseForUser(); return;
+    }
+    if(strcmp(field, "expiry_date") == 0 && !isValidDate(value))
+    {
+        printErrorFmt("Expiry date must use a real YYYY-MM-DD date.");
+        pauseForUser(); return;
+    }
+    if(strcmp(field, "supplier_id") == 0 && (sscanf(value, "%d", &quantityValue) != 1 || quantityValue <= 0))
+    {
+        printErrorFmt("Supplier ID must be a positive number.");
+        pauseForUser(); return;
+    }
+    if((strcmp(field, "buy_price") == 0 || strcmp(field, "sell_price") == 0) &&
+        (sscanf(value, "%f", &numericValue) != 1 || !isPositiveAmount(numericValue)))
+    {
+        printErrorFmt("Price must be greater than zero.");
+        pauseForUser(); return;
+    }
+    if(strcmp(field, "quantity") == 0 && (sscanf(value, "%d", &quantityValue) != 1 || !isNonNegativeNumber(quantityValue)))
+    {
+        printErrorFmt("Quantity must be zero or greater.");
+        pauseForUser(); return;
+    }
+
+    if(strcmp(field, "buy_price") == 0)
+        snprintf(sql, sizeof(sql), "UPDATE medicines SET buy_price=%.2f WHERE medicine_id=%d AND %.2f <= sell_price", numericValue, id, numericValue);
+    else if(strcmp(field, "sell_price") == 0)
+        snprintf(sql, sizeof(sql), "UPDATE medicines SET sell_price=%.2f WHERE medicine_id=%d AND %.2f >= buy_price", numericValue, id, numericValue);
+    else if (strcmp(field, "supplier_id") == 0 || strcmp(field, "quantity") == 0)
     {
         snprintf(sql, sizeof(sql), "UPDATE medicines SET %s=%s WHERE medicine_id=%d", field, value, id);
     }
@@ -223,12 +302,14 @@ void updateMedicine(void)
     if(mysql_query(conn, sql) == 0)
     {
         if(mysql_affected_rows(conn) == 0)
-            printf("\nNo medicine found with that ID.\n");
+            printInfoFmt("No medicine changed. Check the ID and ensure selling price is not below buying price.");
         else
-            printf("\nMedicine Updated Successfully!\n");
+            printSuccessFmt("Medicine updated successfully.");
     }
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+
+    pauseForUser();
 }
 
 void deleteMedicine(void)
@@ -248,12 +329,14 @@ void deleteMedicine(void)
     if(mysql_query(conn, sql) == 0)
     {
         if(mysql_affected_rows(conn) == 0)
-            printf("\nNo medicine found with that ID.\n");
+            printInfoFmt("No medicine found with that ID.");
         else
-            printf("\nMedicine Deleted Successfully!\n");
+            printSuccessFmt("Medicine deleted successfully.");
     }
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+
+    pauseForUser();
 }
 
 void medicineMenu(void)
@@ -262,7 +345,7 @@ void medicineMenu(void)
 
     do
     {
-        printf("\n===== MEDICINES =====\n");
+        printHeader("MANAGE MEDICINES");
         printf("1. Add Medicine\n");
         printf("2. View Medicines\n");
         printf("3. Search Medicine\n");

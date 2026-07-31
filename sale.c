@@ -8,6 +8,7 @@
 #include "sale.h"
 #include "customer.h"
 #include "medicine.h"
+#include "ui.h"
 
 #define MAX_CART_ITEMS 100
 
@@ -17,12 +18,26 @@ struct CartItem
     int quantity;
     float price;
     float subtotal;
+    char medicineName[128];
 };
 
 static void clearInput(void)
 {
     int c;
     while ((c = getchar()) != '\n' && c != EOF);
+}
+
+static void printCart(const struct CartItem cart[], int cartCount, float grandTotal)
+{
+    int i;
+    printHeader("CURRENT SALE CART");
+    printf("ID   Medicine                      Qty    Price       Subtotal\n");
+    printf("-------------------------------------------------------------\n");
+    for(i = 0; i < cartCount; i++)
+        printf("%-4d %-28.28s %-6d %-11.2f %.2f\n", cart[i].medicineId,
+            cart[i].medicineName, cart[i].quantity, cart[i].price, cart[i].subtotal);
+    printf("-------------------------------------------------------------\n");
+    printf("GRAND TOTAL: %.2f\n", grandTotal);
 }
 
 void sellMedicine(void)
@@ -44,6 +59,13 @@ void sellMedicine(void)
     if (scanf("%d", &customerId) != 1)
         return;
     clearInput();
+
+    if(customerId < 0)
+    {
+        printErrorFmt("Customer ID cannot be negative.");
+        pauseForUser();
+        return;
+    }
 
     if(customerId != 0)
     {
@@ -75,7 +97,15 @@ void sellMedicine(void)
             return;
         clearInput();
 
-        snprintf(sql, sizeof(sql), "SELECT sell_price, quantity FROM medicines WHERE medicine_id=%d", medicineId);
+        if(medicineId <= 0)
+        {
+            printErrorFmt("Medicine ID must be a positive number.");
+            continue;
+        }
+
+        snprintf(sql, sizeof(sql),
+            "SELECT medicine_name, sell_price, quantity, (expiry_date IS NOT NULL AND expiry_date <= CURDATE()) "
+            "FROM medicines WHERE medicine_id=%d", medicineId);
         if(mysql_query(conn, sql) != 0)
         {
             printf("\nError: %s\n", mysql_error(conn));
@@ -96,9 +126,22 @@ void sellMedicine(void)
             continue;
         }
 
-        float sellPrice = atof(row[0]);
-        int availableQty = atoi(row[1]);
+        char medicineName[128];
+        float sellPrice = atof(row[1]);
+        int availableQty = atoi(row[2]);
+        bool isExpired = atoi(row[3]) != 0;
+        snprintf(medicineName, sizeof(medicineName), "%s", row[0]);
         mysql_free_result(res);
+
+        if(isExpired)
+        {
+            printErrorFmt("%s is expired and cannot be sold. Remove it from sale stock and follow your pharmacy disposal procedure.", medicineName);
+            printf("\nAdd another item? (y/n): ");
+            if (scanf(" %c", &more) != 1)
+                return;
+            clearInput();
+            continue;
+        }
 
         printf("Available Stock: %d\n", availableQty);
         printf("Quantity to sell: ");
@@ -106,7 +149,18 @@ void sellMedicine(void)
             return;
         clearInput();
 
-        if(qty > availableQty)
+        int existingIndex = -1;
+        int i;
+        for(i = 0; i < cartCount; i++)
+        {
+            if(cart[i].medicineId == medicineId)
+            {
+                existingIndex = i;
+                break;
+            }
+        }
+
+        if(qty + (existingIndex >= 0 ? cart[existingIndex].quantity : 0) > availableQty)
         {
             printf("\nNot enough stock! Only %d available.\n", availableQty);
             printf("\nAdd another item? (y/n): ");
@@ -132,11 +186,20 @@ void sellMedicine(void)
             break;
         }
 
-        cart[cartCount].medicineId = medicineId;
-        cart[cartCount].quantity = qty;
-        cart[cartCount].price = sellPrice;
-        cart[cartCount].subtotal = qty * sellPrice;
-        cartCount++;
+        if(existingIndex >= 0)
+        {
+            cart[existingIndex].quantity += qty;
+            cart[existingIndex].subtotal = cart[existingIndex].quantity * sellPrice;
+        }
+        else
+        {
+            cart[cartCount].medicineId = medicineId;
+            cart[cartCount].quantity = qty;
+            cart[cartCount].price = sellPrice;
+            cart[cartCount].subtotal = qty * sellPrice;
+            snprintf(cart[cartCount].medicineName, sizeof(cart[cartCount].medicineName), "%s", medicineName);
+            cartCount++;
+        }
         grandTotal += qty * sellPrice;
 
         printf("Added: Medicine ID %d x%d = %.2f\n", medicineId, qty, qty * sellPrice);
@@ -148,12 +211,12 @@ void sellMedicine(void)
 
     if(cartCount == 0)
     {
-        printf("\nNo items in cart. Sale cancelled.\n");
+        printInfoFmt("No items in cart. Sale cancelled.");
+        pauseForUser();
         return;
     }
 
-    printf("\n===== SALE SUMMARY =====\n");
-    printf("Grand Total: %.2f\n", grandTotal);
+    printCart(cart, cartCount, grandTotal);
     printf("Confirm sale? (y/n): ");
     if (scanf(" %c", &confirm) != 1)
         return;
@@ -161,7 +224,8 @@ void sellMedicine(void)
 
     if(confirm != 'y' && confirm != 'Y')
     {
-        printf("\nSale cancelled.\n");
+        printInfoFmt("Sale cancelled.");
+        pauseForUser();
         return;
     }
 
@@ -178,7 +242,7 @@ void sellMedicine(void)
 
     if(mysql_query(conn, sql) != 0)
     {
-        printf("\nError creating sale: %s\n", mysql_error(conn));
+        printErrorFmt("Creating sale failed: %s", mysql_error(conn));
         mysql_query(conn, "ROLLBACK");
         return;
     }
@@ -195,7 +259,7 @@ void sellMedicine(void)
 
         if(mysql_query(conn, sql) != 0)
         {
-            printf("\nError adding sale item: %s\n", mysql_error(conn));
+            printErrorFmt("Adding sale item failed: %s", mysql_error(conn));
             success = false;
             break;
         }
@@ -206,7 +270,7 @@ void sellMedicine(void)
 
         if(mysql_query(conn, sql) != 0)
         {
-            printf("\nError updating stock: %s\n", mysql_error(conn));
+            printErrorFmt("Updating stock failed: %s", mysql_error(conn));
             success = false;
             break;
         }
@@ -215,13 +279,15 @@ void sellMedicine(void)
     if(success)
     {
         mysql_query(conn, "COMMIT");
-        printf("\nSale Completed Successfully! (Sale ID: %llu)\n", saleId);
+        printSuccessFmt("Sale completed successfully! Sale ID: %llu", saleId);
     }
     else
     {
         mysql_query(conn, "ROLLBACK");
-        printf("\nSale rolled back due to error. No changes were made.\n");
+        printErrorFmt("Sale rolled back due to an error. No changes were made.");
     }
+
+    pauseForUser();
 }
 
 void viewSales(void)
@@ -243,7 +309,9 @@ void viewSales(void)
 
     res = mysql_store_result(conn);
 
-    printf("\n==============================\n");
+    float totalRevenue = 0.0f;
+    int saleCount = 0;
+    printHeader("SALES HISTORY");
 
     while((row = mysql_fetch_row(res)))
     {
@@ -253,7 +321,13 @@ void viewSales(void)
         printf("Date: %s\n", row[4]);
         printf("Grand Total: %s\n", row[5]);
         printf("------------------------\n");
+        totalRevenue += atof(row[5]);
+        saleCount++;
     }
+
+    printf("Sales shown: %d | Total revenue: %.2f\n", saleCount, totalRevenue);
+
+    pauseForUser();
 
     mysql_free_result(res);
 }
@@ -265,8 +339,6 @@ void searchSales(void)
     MYSQL_RES *res;
     MYSQL_ROW row;
     bool found = false;
-
-    clearInput();
 
     printf("Enter Sale ID or Customer ID to search: ");
     if (fgets(keyword, sizeof(keyword), stdin) == NULL)
@@ -299,9 +371,66 @@ void searchSales(void)
     }
 
     if(!found)
-        printf("No sale found.\n");
+        printInfoFmt("No sale found.");
 
     mysql_free_result(res);
+    pauseForUser();
+}
+
+void viewSaleDetails(void)
+{
+    int saleId;
+    char sql[1024];
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    bool found = false;
+    char grandTotal[64] = "0.00";
+
+    printf("Enter Sale ID to view receipt: ");
+    if (scanf("%d", &saleId) != 1)
+        return;
+    clearInput();
+
+    snprintf(sql, sizeof(sql),
+        "SELECT s.sale_id, s.sale_date, c.full_name, u.full_name, s.grand_total "
+        "FROM sales s LEFT JOIN customers c ON s.customer_id=c.customer_id "
+        "LEFT JOIN users u ON s.user_id=u.user_id WHERE s.sale_id=%d", saleId);
+    if(mysql_query(conn, sql) != 0)
+    {
+        printErrorFmt("%s", mysql_error(conn));
+        return;
+    }
+    res = mysql_store_result(conn);
+    row = mysql_fetch_row(res);
+    if(row)
+    {
+        found = true;
+        snprintf(grandTotal, sizeof(grandTotal), "%s", row[4]);
+        printHeader("SALE RECEIPT");
+        printf("Sale ID: %s\nDate: %s\nCustomer: %s\nServed by: %s\n", row[0], row[1],
+            row[2] ? row[2] : "Walk-in", row[3] ? row[3] : "Unknown");
+        printf("-------------------------------------------------------------\n");
+        mysql_free_result(res);
+        snprintf(sql, sizeof(sql),
+            "SELECT m.medicine_name, si.quantity, si.price, si.subtotal "
+            "FROM sale_items si LEFT JOIN medicines m ON si.medicine_id=m.medicine_id WHERE si.sale_id=%d", saleId);
+        if(mysql_query(conn, sql) != 0)
+        {
+            printErrorFmt("%s", mysql_error(conn));
+            return;
+        }
+        res = mysql_store_result(conn);
+        while((row = mysql_fetch_row(res)))
+            printf("%-28.28s %s x %s = %s\n", row[0] ? row[0] : "Deleted medicine", row[1], row[2], row[3]);
+        mysql_free_result(res);
+        printf("-------------------------------------------------------------\nGRAND TOTAL: %s\n", grandTotal);
+    }
+    else
+        mysql_free_result(res);
+
+    if(!found)
+        printInfoFmt("No sale found with that ID.");
+    pauseForUser();
 }
 
 void deleteSale(void)
@@ -330,7 +459,7 @@ void deleteSale(void)
     res = mysql_store_result(conn);
     if(mysql_num_rows(res) == 0)
     {
-        printf("\nNo sale found with that ID.\n");
+        printInfoFmt("No sale found with that ID.");
         mysql_free_result(res);
         mysql_query(conn, "ROLLBACK");
         return;
@@ -374,12 +503,12 @@ void deleteSale(void)
     if(success)
     {
         mysql_query(conn, "COMMIT");
-        printf("\nSale Deleted Successfully! Stock has been restored.\n");
+        printSuccessFmt("Sale deleted successfully. Stock has been restored.");
     }
     else
     {
         mysql_query(conn, "ROLLBACK");
-        printf("\nDelete rolled back due to error. No changes were made.\n");
+        printErrorFmt("Delete rolled back due to error. No changes were made.");
     }
 }
 
@@ -389,12 +518,13 @@ void saleMenu(void)
 
     do
     {
-        printf("\n===== SELL MEDICINE =====\n");
+        printHeader("SELL MEDICINE");
         printf("1. New Sale\n");
         printf("2. View Sales\n");
         printf("3. Search Sales\n");
         printf("4. Delete Sale\n");
-        printf("5. Back\n");
+        printf("5. View Sale Receipt / Details\n");
+        printf("6. Back\n");
         printf("Choice: ");
 
         if (scanf("%d", &choice) != 1)
@@ -418,7 +548,10 @@ void saleMenu(void)
             case 4:
                 deleteSale();
                 break;
+            case 5:
+                viewSaleDetails();
+                break;
         }
 
-    } while(choice != 5);
+    } while(choice != 6);
 }

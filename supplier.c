@@ -5,6 +5,7 @@
 #include <mysql.h>
 #include "database.h"
 #include "supplier.h"
+#include "ui.h"
 
 static void clearInput(void)
 {
@@ -58,8 +59,6 @@ void addSupplier(void)
     char address[256];
     char sql[1536];
 
-    clearInput();
-
     printf("Company Name: ");
     if (fgets(company, sizeof(company), stdin) == NULL)
         return;
@@ -85,28 +84,41 @@ void addSupplier(void)
         return;
     stripNewline(address);
 
+    if(!isValidBusinessName(company) || !isValidPersonName(contact) || !isValidPhone(phone) || !isValidEmail(email) || !isValidText(address, 250))
+    {
+        printErrorFmt("Enter a valid company, contact name, phone (at least 7 digits), email, and address.");
+        pauseForUser();
+        return;
+    }
+
     snprintf(sql, sizeof(sql),
         "INSERT INTO suppliers(company_name,contact_person,phone,email,address) VALUES('%s','%s','%s','%s','%s')",
         company, contact, phone, email, address);
 
     if(mysql_query(conn, sql) == 0)
-        printf("\nSupplier Added Successfully! (ID: %llu)\n", mysql_insert_id(conn));
+        printSuccessFmt("Supplier added successfully! ID: %llu", mysql_insert_id(conn));
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+
+    pauseForUser();
 }
 
 void viewSuppliers(void)
 {
-    if(mysql_query(conn, "SELECT * FROM suppliers") != 0)
+    if(mysql_query(conn,
+        "SELECT s.supplier_id,s.company_name,s.contact_person,s.phone,s.email,s.address,COUNT(m.medicine_id),COALESCE(SUM(m.quantity),0),COALESCE(SUM(m.quantity*m.buy_price),0) "
+        "FROM suppliers s LEFT JOIN medicines m ON s.supplier_id=m.supplier_id "
+        "GROUP BY s.supplier_id,s.company_name,s.contact_person,s.phone,s.email,s.address ORDER BY s.company_name") != 0)
     {
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+        pauseForUser();
         return;
     }
 
     MYSQL_RES *res = mysql_store_result(conn);
     MYSQL_ROW row;
 
-    printf("\n==============================\n");
+    printHeader("SUPPLIER LIST");
     while((row = mysql_fetch_row(res)))
     {
         printf("ID: %s\n", row[0]);
@@ -115,6 +127,7 @@ void viewSuppliers(void)
         printf("Phone: %s\n", row[3]);
         printf("Email: %s\n", row[4]);
         printf("Address: %s\n", row[5]);
+        printf("Medicine Types: %s | Units Supplied In Stock: %s | Stock Cost Value: %s\n", row[6], row[7], row[8]);
         printf("------------------------\n");
     }
     mysql_free_result(res);
@@ -128,8 +141,6 @@ void searchSupplier(void)
     MYSQL_ROW row;
     bool found = false;
 
-    clearInput();
-
     printf("Enter company name or ID to search: ");
     if (fgets(keyword, sizeof(keyword), stdin) == NULL)
         return;
@@ -141,7 +152,8 @@ void searchSupplier(void)
 
     if(mysql_query(conn, sql) != 0)
     {
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+        pauseForUser();
         return;
     }
 
@@ -154,9 +166,10 @@ void searchSupplier(void)
     }
 
     if(!found)
-        printf("No supplier found.\n");
+        printInfoFmt("No supplier found.");
 
     mysql_free_result(res);
+    pauseForUser();
 }
 
 void updateSupplier(void)
@@ -183,17 +196,34 @@ void updateSupplier(void)
         return;
     stripNewline(value);
 
+    if((strcmp(field, "company_name") == 0 && !isValidBusinessName(value)) ||
+       (strcmp(field, "contact_person") == 0 && !isValidPersonName(value)) ||
+       (strcmp(field, "phone") == 0 && !isValidPhone(value)) ||
+       (strcmp(field, "email") == 0 && !isValidEmail(value)) ||
+       (strcmp(field, "address") == 0 && !isValidText(value, 250)))
+    {
+        printErrorFmt("The new value is not valid for that field.");
+        pauseForUser(); return;
+    }
+    if(strcmp(field, "company_name") != 0 && strcmp(field, "contact_person") != 0 && strcmp(field, "phone") != 0 && strcmp(field, "email") != 0 && strcmp(field, "address") != 0)
+    {
+        printErrorFmt("Choose a field shown in the prompt.");
+        pauseForUser(); return;
+    }
+
     snprintf(sql, sizeof(sql), "UPDATE suppliers SET %s='%s' WHERE supplier_id=%d", field, value, id);
 
     if(mysql_query(conn, sql) == 0)
     {
         if(mysql_affected_rows(conn) == 0)
-            printf("\nNo supplier found with that ID.\n");
+            printInfoFmt("No supplier found with that ID.");
         else
-            printf("\nSupplier Updated Successfully!\n");
+            printSuccessFmt("Supplier updated successfully.");
     }
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+
+    pauseForUser();
 }
 
 void deleteSupplier(void)
@@ -213,12 +243,14 @@ void deleteSupplier(void)
     if(mysql_query(conn, sql) == 0)
     {
         if(mysql_affected_rows(conn) == 0)
-            printf("\nNo supplier found with that ID.\n");
+            printInfoFmt("No supplier found with that ID.");
         else
-            printf("\nSupplier Deleted Successfully!\n");
+            printSuccessFmt("Supplier deleted successfully.");
     }
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+
+    pauseForUser();
 }
 
 void supplierMenu(void)
@@ -227,7 +259,7 @@ void supplierMenu(void)
 
     do
     {
-        printf("\n===== SUPPLIERS =====\n");
+        printHeader("MANAGE SUPPLIERS");
         printf("1. Add Supplier\n");
         printf("2. View Suppliers\n");
         printf("3. Search Supplier\n");

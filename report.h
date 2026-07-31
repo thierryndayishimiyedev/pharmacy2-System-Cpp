@@ -8,5 +8,10 @@ void lowStockReport();
 void expiringSoonReport();
 void topSellingMedicines();
 void salesByDate();
+void expiredMedicinesReport();
+void stockValueReport();
+void monthlySalesReport();
+void smartPharmacyAdvice();
+void removeExpiredMedicines();
 
 #endif

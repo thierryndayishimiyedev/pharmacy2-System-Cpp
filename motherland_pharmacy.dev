@@ -1,0 +1,139 @@
+[Project]
+FileName=motherland_pharmacy.dev
+Name=Motherland Pharmacy
+Type=1
+Ver=2
+ObjFiles=
+Includes=-I"C:\Program Files\MySQL\MySQL Connector C 6.1\include"
+Libs=-L"C:\Program Files\MySQL\MySQL Connector C 6.1\lib" -lmysql
+PrivateResource=
+ResourceIncludes=
+MakeIncludes=
+Compiler=-std=c11 -Wall -Wextra
+CppCompiler=
+Linker=
+IsCpp=0
+Icon=
+ExeOutput=.
+ObjectOutput=.
+LogOutput=
+LogOutputEnabled=0
+OverrideOutput=1
+OverrideOutputName=pharmacy.exe
+HostApplication=
+UseCustomMakefile=0
+CustomMakefile=
+IncludeVersionInfo=0
+SupportXPThemes=0
+CompilerSet=0
+CompilerSettings=0000000000000000000000000
+
+[Unit1]
+FileName=main.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit2]
+FileName=database.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit3]
+FileName=login.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit4]
+FileName=medicine.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit5]
+FileName=supplier.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit6]
+FileName=customer.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit7]
+FileName=sale.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit8]
+FileName=users.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit9]
+FileName=report.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit10]
+FileName=dashboard_report.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit11]
+FileName=ui.c
+CompileCpp=0
+Folder=Source Files
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=

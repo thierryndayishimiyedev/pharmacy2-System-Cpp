@@ -2,10 +2,11 @@
 #include <mysql.h>
 #include "database.h"
 #include "dashboard_report.h"
+#include "ui.h"
 
 void systemOverview(void)
 {
-    printf("\n==================== SYSTEM OVERVIEW ====================\n");
+    printHeader("SYSTEM OVERVIEW");
 
     if(mysql_query(conn, "SELECT COUNT(*) FROM users") == 0)
     {
@@ -58,12 +59,13 @@ void systemOverview(void)
 
     printf("-----------------------------------------------------------\n");
 
-    if(mysql_query(conn, "SELECT COUNT(*), COALESCE(SUM(grand_total),0) FROM sales") == 0)
+    if(mysql_query(conn, "SELECT COUNT(*), COALESCE(SUM(grand_total),0), COALESCE(AVG(grand_total),0) FROM sales") == 0)
     {
         MYSQL_RES *res = mysql_store_result(conn);
         MYSQL_ROW row = mysql_fetch_row(res);
         printf("Total Sales Made:       %s\n", row[0]);
         printf("Total Revenue Earned:   %s\n", row[1]);
+        printf("Average Sale Value:     %s\n", row[2]);
         mysql_free_result(res);
     }
 
@@ -109,6 +111,14 @@ void systemOverview(void)
         MYSQL_RES *res = mysql_store_result(conn);
         MYSQL_ROW row = mysql_fetch_row(res);
         printf("Expiring Soon (<=30d):  %s\n", row[0]);
+        mysql_free_result(res);
+    }
+
+    if(mysql_query(conn, "SELECT COUNT(*) FROM medicines WHERE expiry_date < CURDATE()") == 0)
+    {
+        MYSQL_RES *res = mysql_store_result(conn);
+        MYSQL_ROW row = mysql_fetch_row(res);
+        printf("Expired Medicines:      %s\n", row[0]);
         mysql_free_result(res);
     }
 

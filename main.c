@@ -9,6 +9,7 @@
 #include "users.h"
 #include "report.h"
 #include "dashboard_report.h"
+#include "ui.h"
 
 static void clearInput(void)
 {
@@ -22,8 +23,7 @@ void dashboard(void)
 
     do
     {
-        printf("\n========== PHARMACY MANAGEMENT SYSTEM =========="
-               "\n");
+        printHeader("PHARMACY MANAGEMENT SYSTEM");
         printf("1. Manage Users\n");
         printf("2. Manage Medicines\n");
         printf("3. Manage Suppliers\n");
@@ -65,10 +65,11 @@ void dashboard(void)
                 systemOverview();
                 break;
             case 8:
-                printf("Logged Out!\n");
+                printSuccessFmt("Logged out successfully.");
+                setActiveUserDisplay("");
                 return;
             default:
-                printf("Invalid Choice!\n");
+                printErrorFmt("Invalid choice. Please select a number from the menu.");
         }
 
     } while(true);
@@ -80,8 +81,7 @@ void menu(void)
 
     while(true)
     {
-        printf("\n========== MAIN MENU =========="
-               "\n");
+        printHeader("MAIN MENU");
         printf("1. Login\n");
         printf("2. Exit\n");
         printf("Choice: ");
@@ -98,21 +98,22 @@ void menu(void)
             case 1:
                 if(login())
                 {
-                    printf("\nLogin Successful!\n");
+                    printSuccessFmt("Login successful. Welcome!");
                     dashboard();
                 }
                 else
                 {
-                    printf("\nInvalid Username or Password!\n");
+                    printErrorFmt("Invalid username or password. Please try again.");
                 }
                 break;
 
             case 2:
+                printInfoFmt("Exiting the system. Goodbye!");
                 disconnectDB();
                 return;
 
             default:
-                printf("Invalid Choice!\n");
+                printErrorFmt("Invalid choice. Enter a valid option.");
         }
     }
 }

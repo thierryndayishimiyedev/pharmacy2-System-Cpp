@@ -5,6 +5,7 @@
 #include <mysql.h>
 #include "database.h"
 #include "customer.h"
+#include "ui.h"
 
 static void clearInput(void)
 {
@@ -57,8 +58,6 @@ void addCustomer(void)
     char address[256];
     char sql[1024];
 
-    clearInput();
-
     printf("Full Name: ");
     if (fgets(name, sizeof(name), stdin) == NULL)
         return;
@@ -79,28 +78,41 @@ void addCustomer(void)
         return;
     stripNewline(address);
 
+    if(!isValidPersonName(name) || !isValidPhone(phone) || !isValidEmail(email) || !isValidText(address, 250))
+    {
+        printErrorFmt("Enter a valid name, phone (at least 7 digits), email, and address. Quotes are not allowed.");
+        pauseForUser();
+        return;
+    }
+
     snprintf(sql, sizeof(sql),
         "INSERT INTO customers(full_name,phone,email,address) VALUES('%s','%s','%s','%s')",
         name, phone, email, address);
 
     if(mysql_query(conn, sql) == 0)
-        printf("\nCustomer Added Successfully! (ID: %llu)\n", mysql_insert_id(conn));
+        printSuccessFmt("Customer added successfully! ID: %llu", mysql_insert_id(conn));
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+
+    pauseForUser();
 }
 
 void viewCustomers(void)
 {
-    if(mysql_query(conn, "SELECT * FROM customers") != 0)
+    if(mysql_query(conn,
+        "SELECT c.customer_id,c.full_name,c.phone,c.email,c.address,COUNT(s.sale_id),COALESCE(SUM(s.grand_total),0) "
+        "FROM customers c LEFT JOIN sales s ON c.customer_id=s.customer_id "
+        "GROUP BY c.customer_id,c.full_name,c.phone,c.email,c.address ORDER BY c.full_name") != 0)
     {
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+        pauseForUser();
         return;
     }
 
     MYSQL_RES *res = mysql_store_result(conn);
     MYSQL_ROW row;
 
-    printf("\n==============================\n");
+    printHeader("CUSTOMER LIST");
     while((row = mysql_fetch_row(res)))
     {
         printf("ID: %s\n", row[0]);
@@ -108,6 +120,7 @@ void viewCustomers(void)
         printf("Phone: %s\n", row[2]);
         printf("Email: %s\n", row[3]);
         printf("Address: %s\n", row[4]);
+        printf("Purchases: %s | Total Spent: %s\n", row[5], row[6]);
         printf("------------------------\n");
     }
     mysql_free_result(res);
@@ -121,8 +134,6 @@ void searchCustomer(void)
     MYSQL_ROW row;
     bool found = false;
 
-    clearInput();
-
     printf("Enter name, phone or ID to search: ");
     if (fgets(keyword, sizeof(keyword), stdin) == NULL)
         return;
@@ -134,7 +145,8 @@ void searchCustomer(void)
 
     if(mysql_query(conn, sql) != 0)
     {
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+        pauseForUser();
         return;
     }
 
@@ -147,9 +159,10 @@ void searchCustomer(void)
     }
 
     if(!found)
-        printf("No customer found.\n");
+        printInfoFmt("No customer found.");
 
     mysql_free_result(res);
+    pauseForUser();
 }
 
 void updateCustomer(void)
@@ -176,17 +189,45 @@ void updateCustomer(void)
         return;
     stripNewline(value);
 
+    if(strcmp(field, "full_name") == 0 && !isValidPersonName(value))
+    {
+        printErrorFmt("Full name must contain valid letters and be at least 2 characters.");
+        pauseForUser(); return;
+    }
+    if(strcmp(field, "phone") == 0 && !isValidPhone(value))
+    {
+        printErrorFmt("Phone must contain at least 7 digits.");
+        pauseForUser(); return;
+    }
+    if(strcmp(field, "email") == 0 && !isValidEmail(value))
+    {
+        printErrorFmt("Enter a valid email address.");
+        pauseForUser(); return;
+    }
+    if(strcmp(field, "address") == 0 && !isValidText(value, 250))
+    {
+        printErrorFmt("Enter a valid address.");
+        pauseForUser(); return;
+    }
+    if(strcmp(field, "full_name") != 0 && strcmp(field, "phone") != 0 && strcmp(field, "email") != 0 && strcmp(field, "address") != 0)
+    {
+        printErrorFmt("Choose one of: full_name, phone, email, address.");
+        pauseForUser(); return;
+    }
+
     snprintf(sql, sizeof(sql), "UPDATE customers SET %s='%s' WHERE customer_id=%d", field, value, id);
 
     if(mysql_query(conn, sql) == 0)
     {
         if(mysql_affected_rows(conn) == 0)
-            printf("\nNo customer found with that ID.\n");
+            printInfoFmt("No customer found with that ID.");
         else
-            printf("\nCustomer Updated Successfully!\n");
+            printSuccessFmt("Customer updated successfully.");
     }
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+
+    pauseForUser();
 }
 
 void deleteCustomer(void)
@@ -206,12 +247,14 @@ void deleteCustomer(void)
     if(mysql_query(conn, sql) == 0)
     {
         if(mysql_affected_rows(conn) == 0)
-            printf("\nNo customer found with that ID.\n");
+            printInfoFmt("No customer found with that ID.");
         else
-            printf("\nCustomer Deleted Successfully!\n");
+            printSuccessFmt("Customer deleted successfully.");
     }
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+
+    pauseForUser();
 }
 
 void customerMenu(void)
@@ -220,7 +263,7 @@ void customerMenu(void)
 
     do
     {
-        printf("\n===== CUSTOMERS =====\n");
+        printHeader("MANAGE CUSTOMERS");
         printf("1. Add Customer\n");
         printf("2. View Customers\n");
         printf("3. Search Customer\n");

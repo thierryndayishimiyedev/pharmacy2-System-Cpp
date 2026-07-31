@@ -125,6 +125,9 @@ If anything fails mid-sale (e.g., a database error), the entire transaction is *
 | Expiring Soon Report | Medicines expiring within a number of days you choose |
 | Top Selling Medicines | Best-selling medicines ranked by units sold |
 | Sales By Specific Date | All sales on a chosen date, with a day total |
+| Expired Medicines | Identifies expired stock and its cost at risk |
+| Inventory Value | Shows stock units, cost, potential sales value, and potential margin |
+| Monthly Sales Summary | Shows sale count, revenue, and average sale by month |
 
 ## 📈 System Overview Dashboard
 

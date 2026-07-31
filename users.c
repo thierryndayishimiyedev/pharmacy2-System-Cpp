@@ -5,6 +5,7 @@
 #include <mysql.h>
 #include "database.h"
 #include "users.h"
+#include "ui.h"
 
 static void clearInput(void)
 {
@@ -58,8 +59,6 @@ void addUser(void)
     char role[64];
     char sql[1536];
 
-    clearInput();
-
     printf("Full Name: ");
     if (fgets(name, sizeof(name), stdin) == NULL)
         return;
@@ -80,24 +79,34 @@ void addUser(void)
         return;
     stripNewline(phone);
 
-    printf("Role: ");
+    printf("Role (Admin or Pharmacist): ");
     if (fgets(role, sizeof(role), stdin) == NULL)
         return;
     stripNewline(role);
+
+    if(!isValidPersonName(name) || !isValidUsername(username) || !isValidPassword(password) || !isValidPhone(phone) || !isValidRole(role))
+    {
+        printErrorFmt("Use a valid name, phone, username (3-30 letters/numbers/_), password (4+ no spaces), and role: Admin or Pharmacist.");
+        pauseForUser();
+        return;
+    }
 
     snprintf(sql, sizeof(sql),
         "INSERT INTO users(full_name,username,password,phone,role) VALUES('%s','%s','%s','%s','%s')",
         name, username, password, phone, role);
 
     if(mysql_query(conn, sql) == 0)
-        printf("\nUser Added Successfully! (ID: %llu)\n", mysql_insert_id(conn));
+        printSuccessFmt("User added successfully! ID: %llu", mysql_insert_id(conn));
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
 }
 
 void viewUsers(void)
 {
-    if(mysql_query(conn, "SELECT user_id,full_name,username,phone,role FROM users") != 0)
+    if(mysql_query(conn,
+        "SELECT u.user_id,u.full_name,u.username,u.phone,u.role,COUNT(s.sale_id),COALESCE(SUM(s.grand_total),0) "
+        "FROM users u LEFT JOIN sales s ON u.user_id=s.user_id "
+        "GROUP BY u.user_id,u.full_name,u.username,u.phone,u.role ORDER BY u.full_name") != 0)
     {
         printf("\nError: %s\n", mysql_error(conn));
         return;
@@ -115,6 +124,7 @@ void viewUsers(void)
         printf("Username: %s\n", row[2]);
         printf("Phone: %s\n", row[3]);
         printf("Role: %s\n", row[4]);
+        printf("Sales Processed: %s | Revenue Processed: %s\n", row[5], row[6]);
         printf("------------------------\n");
     }
 
@@ -129,8 +139,6 @@ void searchUser(void)
     MYSQL_ROW row;
     bool found = false;
 
-    clearInput();
-
     printf("Enter name, username or ID to search: ");
     if (fgets(keyword, sizeof(keyword), stdin) == NULL)
         return;
@@ -142,7 +150,8 @@ void searchUser(void)
 
     if(mysql_query(conn, sql) != 0)
     {
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
+        pauseForUser();
         return;
     }
 
@@ -155,7 +164,8 @@ void searchUser(void)
     }
 
     if(!found)
-        printf("No user found.\n");
+        printInfoFmt("No user found.");
+    pauseForUser();
 
     mysql_free_result(res);
 }
@@ -184,17 +194,32 @@ void updateUser(void)
         return;
     stripNewline(value);
 
+    if((strcmp(field, "full_name") == 0 && !isValidPersonName(value)) ||
+       (strcmp(field, "username") == 0 && !isValidUsername(value)) ||
+       (strcmp(field, "password") == 0 && !isValidPassword(value)) ||
+       (strcmp(field, "phone") == 0 && !isValidPhone(value)) ||
+       (strcmp(field, "role") == 0 && !isValidRole(value)))
+    {
+        printErrorFmt("The new value is not valid for that field.");
+        pauseForUser(); return;
+    }
+    if(strcmp(field, "full_name") != 0 && strcmp(field, "username") != 0 && strcmp(field, "password") != 0 && strcmp(field, "phone") != 0 && strcmp(field, "role") != 0)
+    {
+        printErrorFmt("Choose a field shown in the prompt.");
+        pauseForUser(); return;
+    }
+
     snprintf(sql, sizeof(sql), "UPDATE users SET %s='%s' WHERE user_id=%d", field, value, id);
 
     if(mysql_query(conn, sql) == 0)
     {
         if(mysql_affected_rows(conn) == 0)
-            printf("\nNo user found with that ID.\n");
+            printInfoFmt("No user found with that ID.");
         else
-            printf("\nUser Updated Successfully!\n");
+            printSuccessFmt("User updated successfully.");
     }
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
 }
 
 void deleteUser(void)
@@ -214,12 +239,12 @@ void deleteUser(void)
     if(mysql_query(conn, sql) == 0)
     {
         if(mysql_affected_rows(conn) == 0)
-            printf("\nNo user found with that ID.\n");
+            printInfoFmt("No user found with that ID.");
         else
-            printf("\nUser Deleted Successfully!\n");
+            printSuccessFmt("User deleted successfully.");
     }
     else
-        printf("\nError: %s\n", mysql_error(conn));
+        printErrorFmt("%s", mysql_error(conn));
 }
 
 void usersMenu(void)
@@ -228,7 +253,7 @@ void usersMenu(void)
 
     do
     {
-        printf("\n===== MANAGE USERS =====\n");
+        printHeader("MANAGE USERS");
         printf("1. Add User\n");
         printf("2. View Users\n");
         printf("3. Search User\n");
